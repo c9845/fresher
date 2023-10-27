@@ -537,10 +537,15 @@ func run() {
 	//Get path to built binary.
 	pathToBuiltBinary := getPathToBuiltBinary()
 
+	//Build arguments, i.e.: flags, to provide to binary.
+	args := []string{
+		config.Data().Flags,
+	}
+
 	//Initialize the command, but do not run it.
-	cmd := exec.Command(pathToBuiltBinary)
+	cmd := exec.Command(pathToBuiltBinary, args...)
 	if config.Data().Verbose {
-		events.Printf("Running... %s", pathToBuiltBinary)
+		events.Printf("Running... %s %s", pathToBuiltBinary, strings.Join(args, " "))
 	} else {
 		events.Printf("Running...")
 	}

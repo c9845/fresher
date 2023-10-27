@@ -31,6 +31,11 @@ func main() {
 		return
 	}
 
+	//Log interpreted config file path.
+	if *verbose {
+		log.Println("fresher config:", *configFilePath)
+	}
+
 	//Check if user wants to create a default config file.
 	if *createConfig {
 		err := config.CreateDefaultConfig()

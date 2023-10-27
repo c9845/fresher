@@ -121,6 +121,10 @@ type File struct {
 	//See https://pkg.go.dev/cmd/go#:~:text=but%20still%20recognized.)%0A%2D-,trimpath,-remove%20all%20file.
 	GoTrimpath bool `yaml:"GoTrimpath"`
 
+	//Flags is the list of flags you provide to your binary or `go run`, such as
+	//`go run main.go -flag1="test"`.
+	Flags string `yaml:"Flags"`
+
 	//Verbose causes fresher to output more logging. Use for diagnostics when
 	//determining which files/directories/extensions are being watched and when file
 	//change events are occuring.
@@ -161,6 +165,7 @@ func newDefaultConfig() (f *File) {
 		GoTags:                 "",                         //will be overriden by flag to fresher.
 		GoLdflags:              "-s -w",                    //probably unnecessary since the built binary shouldn't be used for production or distribution.
 		GoTrimpath:             true,                       //probably unnecessary since the built binary shouldn't be used for production or distribution.
+		Flags:                  "",                         //
 		Verbose:                false,                      //will be overriden by flag to fresher.
 
 		usingBuiltInDefaults: true,

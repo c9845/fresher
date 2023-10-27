@@ -62,6 +62,7 @@ Some configuration file fields can be overridden by flags to `fresher`.
 | GoTags | Anything you would provide to `go run -tags` or `go build -tags`. | "" |
 | GoLdflags | Anything you would provide to `go build -ldflags`. | "-s -w" |
 | GoTrimpath | If the `-trimpath` flag is provided to `go build`. | true |
+| Flags | Any flags your binary defines using `flags` package. | "" |
 | Verbose | If extra logging is provided while `fresher` is running. | false |
 
 
