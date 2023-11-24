@@ -1,4 +1,4 @@
-module github.com/c9845/fresher
+module github.com/HamidAtPressPage/fresher
 
 go 1.19
 
