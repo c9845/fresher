@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/c9845/fresher/config"
+	"github.com/HamidAtPressPage/fresher/config"
 	"github.com/mattn/go-colorable"
 )
 

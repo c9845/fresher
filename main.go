@@ -8,9 +8,9 @@ import (
 	"os"
 	"strings"
 
-	"github.com/c9845/fresher/config"
-	"github.com/c9845/fresher/runner3"
-	"github.com/c9845/fresher/version"
+	"github.com/HamidAtPressPage/fresher/config"
+	"github.com/HamidAtPressPage/fresher/runner3"
+	"github.com/HamidAtPressPage/fresher/version"
 )
 
 func main() {

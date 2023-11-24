@@ -31,7 +31,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/c9845/fresher/version"
+	"github.com/HamidAtPressPage/fresher/version"
 	"gopkg.in/yaml.v2"
 )
 
