@@ -135,6 +135,8 @@ type File struct {
 	//diagnostic output (i.e.: path to config file) when a config file wasn't used
 	//since if a config file wasn't used, there is no path to log out!
 	usingBuiltInDefaults bool `yaml:"-"`
+
+	DisableLogging bool `yaml:"DisableLogging"`
 }
 
 // parsedConfig is the data parsed from the config file. This data is stored so that
@@ -167,6 +169,7 @@ func newDefaultConfig() (f *File) {
 		GoTrimpath:             true,                       //probably unnecessary since the built binary shouldn't be used for production or distribution.
 		Flags:                  "",                         //
 		Verbose:                false,                      //will be overriden by flag to fresher.
+		DisableLogging:         false,
 
 		usingBuiltInDefaults: true,
 	}
@@ -523,6 +526,10 @@ func (conf *File) OverrideTags(t string) {
 // logging on a case-by-case basis.
 func (conf *File) OverrideVerbose(v bool) {
 	conf.Verbose = v
+}
+
+func (conf *File) OverrideDisableLogging(v bool) {
+	conf.DisableLogging = v
 }
 
 // isStringInSlice checks if needle is in haystack.

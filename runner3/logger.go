@@ -72,6 +72,10 @@ func newLogger(prefix, color string) coloredLogger {
 
 // Printf calls log.Printf with color sequences surrounding some of the text.
 func (c *coloredLogger) Printf(format string, v ...interface{}) {
+	if config.Data().DisableLogging {
+		return
+	}
+
 	resetCode := fmt.Sprintf("\033[%sm", "0")
 
 	format = fmt.Sprintf("%s%s |%s %s", c.colorCode, c.prefix, resetCode, format)
