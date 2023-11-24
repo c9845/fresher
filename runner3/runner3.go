@@ -22,7 +22,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/c9845/fresher/config"
+	"github.com/HamidAtPressPage/fresher/config"
 	"github.com/fsnotify/fsnotify"
 )
 

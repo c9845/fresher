@@ -7,7 +7,7 @@ fresher is designed for use during development to remove the need to run `go run
 
 
 # Installing:
-Run `go install github.com/c9845/fresher@latest`.
+Run `go install github.com/HamidAtPressPage/fresher@latest`.
 
 
 # Usage:
