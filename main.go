@@ -1,7 +1,6 @@
 package main
 
 import (
-	"errors"
 	"flag"
 	"fmt"
 	"log"
@@ -57,7 +56,8 @@ func main() {
 	//    - If a file cannot be found, create a default config and save it to the path provided.
 	err := config.Read(*configFilePath, *printConfig)
 	if err != nil {
-		log.Fatalln("Could not parse config file.", errors.Unwrap(err))
+		log.Fatalln("Could not parse config file.", err)
+		os.Exit(0)
 		return
 	}
 
