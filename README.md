@@ -50,13 +50,13 @@ Some configuration file fields can be overridden by flags to `fresher`.
 
 | Field | Description | Default|
 |-------|-------------|--------|
-| WorkingDir | The directory `fresher` should operate on. | . |
-| EntryPoint | The relative path to the directory that holds the "main" package based off of the directory `fresher` is being run from. Typically this is "." meaning "main" is in the same directory as `fresher` is being run from. This really only needs to be used if your "main" package is in a subdirectory of your repo, such as "cmd/x". | . |
-| TempDir | The name of the directory of of WorkingDir that `fresher` uses for storing the built binary and error logs. | "tmp" |
+| WorkingDir | The directory `fresher` should watch for changes i. Typically, the root of your repository. | . |
+| EntryPoint | The relative path to your "package main" file based off of the directory `fresher` is being run from. If you have a "main.go" file in your local directory from which you are running fresher, you can leave this as ".". However, if your "package main" is in any other path, specifically a subdirectory of your repo, you must provide the relative path to it here (i.e: "cmd/app/app.go"). | . |
+| TempDir | The name of the directory off of WorkingDir that `fresher` uses for storing the built binary. | "tmp" |
 | ExtensionsToWatch | The types of files `fresher` will watch for changes. Typically just files used in a binary. | [".go", ".html"] |
 | NoRebuildExtensions | The types of files `fresher` will just rerun, not rebuild, the binary on upon a file change occuring. Typically this includes files that are read and cached by a running binary (for example, HTML templates via the `html/template` package), but not included in the binary. Caution if you use embedded files! | [".html"] |
 | DirectoriesToIgnore | Directories that will not be watched for changes, recursively. | ["tmp", "node_modules", ".git", ".vscode"]
-| BuildDelayMilliseconds | The amount of time to wait after a file change event occurs before rebuilding the binary. A delay is useful for catching multiple saves happening in rapid succession. You should not need to set this higher than 300. | 300 | 
+| BuildDelayMilliseconds | The amount of time to wait after a file change event occurs before rebuilding the binary. A delay is useful for catching multiple saves happening in rapid succession. You should not need to set this higher than 300. | 100 | 
 | BuildName | The name of the binary as built by `fresher`. This file is stored in TempDir. | fresher-build |
 | BuildLogFilename | The name of the log file where errors from `go build` will be saved to. This file is stored in TempDir. | fresher-build-errors.log |
 | GoTags | Anything you would provide to `go run -tags` or `go build -tags`. | "" |

@@ -338,9 +338,6 @@ var buildCmdRunning bool = false
 
 // errors returned from build()
 var (
-	//errBuildFailed is returned when a build fails.
-	errBuildFailed = errors.New("build failed")
-
 	//errBuildKilled is returned when a build is killed in the middle of building due
 	//to a message on the killBuildingChan channel. This isn't really an error since
 	//the binary will just be rebuilt (similar error in usage as fs.SkipDir).
@@ -359,15 +356,8 @@ func build(event fsnotify.Event) (err error) {
 	eventName := event.Name
 	eventType := event.Op.String()
 
-	//Get path and name to output built binary as. This is a file located in the
-	//temp directory.
-	pathToBuiltBinary := getPathToBuiltBinary()
-
-	//Build arguments passed to "go" command.
-	args := []string{
-		"build",
-		"-o", pathToBuiltBinary,
-	}
+	//Build argument list passed to "go" command.
+	args := []string{"build"}
 
 	//Handle other go build flags.
 	if len(config.Data().GoTags) > 0 {
@@ -382,31 +372,32 @@ func build(event fsnotify.Event) (err error) {
 		args = append(args, "-trimpath")
 	}
 
-	//Get path to entry point of app. This is typically just the repository root,
-	//but could be a subdirectory as well.
-	entryPoint := config.Data().EntryPoint
+	//Handle path where built binary will be saved.
+	args = append(args, "-o", getPathToBuiltBinary())
 
-	//Add the entry point to build the binary from.
-	args = append(args, entryPoint)
+	//Handle EntryPoint
+	args = append(args, config.Data().EntryPoint)
 
-	//Initialize the command, but do not run it.
+	//Configure the command, but do not run it.
 	buildStartTime := time.Now()
-	cmd := exec.Command("go", args...)
+	command := "go"
+	cmd := exec.Command(command, args...)
 	if config.Data().Verbose {
-		events.Verbosef("Building... %s %s", "go", strings.Join(args, " "))
+		events.Verbosef("Building... %s (%s); %s", eventName, eventType, cmd.String())
 	} else {
 		events.Printf("Building... %s (%s)", eventName, eventType)
 	}
 
-	//Set up logging for when the command runs. We want to capture the output logging
-	//and output it to the user running fresher. This is so the user can see any output
-	//from running `go build` to diagnose issues.
-	stderr, err := cmd.StderrPipe()
+	//Configure stdout and stderr handling for when the command runs. stdout and stderr
+	//output from running the command get copied to fresher's stdout and stderr so
+	//that the user running fresher can see any errors from running the command. See
+	//more below after .Start().
+	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		return
 	}
 
-	stdout, err := cmd.StdoutPipe()
+	stderr, err := cmd.StderrPipe()
 	if err != nil {
 		return
 	}
@@ -450,29 +441,23 @@ func build(event fsnotify.Event) (err error) {
 	buildCmdRunning = true
 	err = cmd.Start()
 	if err != nil {
+		errs.Verbosef("Error starting %s", err)
 		return
 	}
 
-	//Copy output for stdout to fresher's stdout. This way user sees output from
-	//building.
-	_, err = io.Copy(os.Stdout, stdout)
-	if err != nil {
-		return
-	}
-
-	//Capture stderr since it might have a bunch of diagnostic info about why built
-	//failed. Stderr is saved to error file so that it is easier to inspect then
-	//reading in terminal output.
-	errBuf, err := io.ReadAll(stderr)
-	if err != nil {
-		errs.Printf("Error capturing stderr %s", err)
-	}
+	//Copy output from stdout and stderr to fresher's stdout and stderr. This way user
+	//can see output from building.
+	go io.Copy(os.Stdout, stdout)
+	go io.Copy(os.Stderr, stderr)
 
 	//Wait for command to finish. Have to handle build being killed by us!
 	err = cmd.Wait()
 	if err != nil && buildKilled {
+		errs.Verbosef("Error waiting, build killed %s", err)
 		return errBuildKilled
 	} else if err != nil {
+		errs.Verbosef("Error waiting %s", err)
+		errs.Printf("Build Command: %s", cmd.String())
 		return
 	}
 
@@ -482,15 +467,8 @@ func build(event fsnotify.Event) (err error) {
 	buildCmdRunning = false
 	cancelKiller <- true
 
-	//If an error occured, write the output to a log file. There could be useful info
-	//such as stack traces or other logging to identify issue in this error.
-	if len(errBuf) > 0 {
-		saveBuildErrorsLog(string(errBuf))
-		return errBuildFailed
-	}
-
 	//Extra logging.
-	events.Verbosef("Building... %s %s (Took %s)", "go", strings.Join(args, " "), time.Since(buildStartTime))
+	events.Verbosef("Building... %s (%s); %s (Took %s)", eventName, eventType, cmd.String(), time.Since(buildStartTime))
 
 	//Build was successful. Binary is now located in temp dir.
 	return
@@ -507,29 +485,6 @@ func getPathToBuiltBinary() string {
 	return path
 }
 
-// saveBuildErrorsLog saves the stderr output from `go build` when build() is called
-// to a file. This file is deleted each time a build is attempted via
-// deleteBuildErrorsLog which is called in start().
-func saveBuildErrorsLog(message string) {
-	//Get path to log file.
-	pathToFile := filepath.Join(config.Data().TempDir, config.Data().BuildLogFilename)
-
-	//Create the file.
-	f, err := os.Create(pathToFile)
-	if err != nil {
-		errs.Printf("Could not create log file %s", err)
-		//not exiting on error since we don't do anything with error anyway.
-	}
-	defer f.Close()
-
-	//Write to file
-	_, err = f.WriteString(message)
-	if err != nil {
-		errs.Printf("Could not write log file %s", err)
-		//not exiting on error since we don't do anything with error anyway.
-	}
-}
-
 // run runs the binary build in build().
 //
 // run() is called in start().
@@ -542,7 +497,7 @@ func run() {
 		config.Data().Flags,
 	}
 
-	//Initialize the command, but do not run it.
+	//Configure running the binary, but do not run it yet.
 	cmd := exec.Command(pathToBuiltBinary, args...)
 	if config.Data().Verbose {
 		events.Printf("Running... %s %s", pathToBuiltBinary, strings.Join(args, " "))
@@ -550,27 +505,28 @@ func run() {
 		events.Printf("Running...")
 	}
 
-	//Set up logging for when the command runs. We want to capture the output logging
-	//and output it to the user running fresher. This is so the user can see any output
-	//from running the binary to diagnose issues.
-	stderr, err := cmd.StderrPipe()
-	if err != nil {
-		log.Fatalln(err)
-	}
-
+	//Configure stdout and stderr handling for when the binary runs. stdout and stderr
+	//output from running the binary get copied to fresher's stdout and stderr so
+	//that the user running fresher can see any errors from running the binary. See
+	//more below after .Start().
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		log.Fatalln(err)
 	}
 
-	//Run the command/binary.
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		log.Fatalln(err)
+	}
+
+	//Run the built binary.
 	err = cmd.Start()
 	if err != nil {
 		log.Fatalln(err)
 	}
 
-	//Copy output from the command to output from fresher. This way the output from
-	//the binary is displayed to the user in real time.
+	//Copy output from the binary to fresher's stdout and stderr. This way the user
+	//can see output from running the binary.
 	go io.Copy(os.Stderr, stderr)
 	go io.Copy(os.Stdout, stdout)
 

@@ -1,7 +1,18 @@
 /*
-Package config handles configuration of the app.
+Package config handles configuration of the app. The configuration can simply be
+a default, or a config file can be provided. The config data is used for low-level
+settings of the app and can be used elsewhere in this app.
 
-The config file is in yaml format for easy readability.
+The config file is in YAML format for easy readability. However, the file does not
+need to end in the yaml extension. YAML is used since it allows for adding comments
+to the config file (JSON does not). Having comments is really nice for providing some
+additional info in the config file.
+
+This package must not import any other packages from within this app to prevent
+import loops (besides minor utility packages).
+
+---
+
 Create a default config file in the current working directory using the -init flag.
 
 A config is handled one of three ways:
@@ -10,15 +21,16 @@ A config is handled one of three ways:
     warning is shown about the missing file.
   - If the path is blank, the default config is used.
 
-This package must not import any other packages from within this repo to prevent
-import loops (besides minor utility packages) since the config package is most likely
-read by nearly all other packages in this repo.
+---
 
 When adding a new field to the config file:
   - Add the field to the File type below.
   - Determine any default value(s) for the field and set it in newDefaultConfig().
   - Set validation in validate().
   - Document the field as needed (README, other documentation).
+
+Try to keep the organization/order of the config fields the same between the config
+file templates, the type defined below, validation, and diagnostics.
 */
 package config
 
@@ -28,11 +40,12 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"time"
 
 	"github.com/c9845/fresher/version"
-	"gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v3"
 )
 
 // DefaultConfigFileName is the typical name of the config file.
@@ -46,24 +59,27 @@ const DefaultConfigFileName = "fresher.conf"
 // kicked out. We would rather check for the negative number here and provide a
 // nicer error message.
 //
-// Struct tags are needed for working with yaml.v2 package, otherwise the package
+// Struct tags are needed for working with yaml.v3 package, otherwise the package
 // expects fields to start with lower case characters. However, if we lower cased all
 // the struct field names, then we wouldn't be able to access those fields in other
 // packages.
 //
 // If adding or updating a field here, make sure to document it in README.md!
 type File struct {
-	//WorkingDir is the path to the working directory, the directory `go run` or
-	//`go build` would be executed in.
+	//WorkingDir is the path to the root of your repository. All files in or within
+	//subdirectories of this directory, recursively, will be watched for changes.
+	//
+	//Typically this is set to "." since your terminal, and thus where fresher is
+	//being run from, is already set to the root directory of your repo.
 	WorkingDir string `yaml:"WorkingDir"`
 
-	//EntryPoint is the relative path to directory where the "main" package is located
-	//based off the directory fresher is being run from.
+	//EntryPoint is the path to your "package main" file, the root file of your app
+	//that you want to build.
 	//
-	//This really only needs to be modified if your "main" package is located in a
-	//subdirectory of your repo, such as "cmd/x". In this case, you cannot just run
-	//fresher in "cmd/x" since any file changes made outside of "cmd/x" would not be
-	//recognized and thus the binary will not be rebuild/rerun.
+	//If you have a "main.go" file in your local directory from which you are running
+	//fresher, you can leave this as ".". However, if your "package main" is in any
+	//other path, specifically a subdirectory of your repo, you must provide the
+	//relative path to it here (i.e: "cmd/app/app.go").
 	EntryPoint string `yaml:"EntryPoint"`
 
 	//TempDir is the directory off of WorkingDir where fresher will store the built
@@ -144,29 +160,22 @@ type File struct {
 var parsedConfig File
 
 // newDefaultConfig returns a File with default values set for each field.
-func newDefaultConfig() (f *File) {
-	//Base working directory is relative to where fresher has been called from. This
-	//is done, instead of using absolute path, so that in case the fresher.conf config
-	//file is saved to version control, no identifying information from an absolute
-	//path is saved. I.e.: if using absolute paths, the path to the working directory
-	//may be something like /users/johnsmith/.../fresher.conf, leaking the user's name.
-	workingDir := "."
-
-	f = &File{
-		WorkingDir:             workingDir,
-		EntryPoint:             ".",
-		TempDir:                filepath.Join(workingDir, "tmp"),
-		ExtensionsToWatch:      []string{".go", ".html"},
-		NoRebuildExtensions:    []string{".html"},
-		DirectoriesToIgnore:    []string{"tmp", "node_modules", ".git", ".vscode"},
-		BuildDelayMilliseconds: 100,                        //100 is "instant" enough but helps catch CTRL+S being hit rapidly.
-		BuildName:              "fresher-build",            //could really be anything.
-		BuildLogFilename:       "fresher-build-errors.log", //could really be anything.
-		GoTags:                 "",                         //will be overriden by flag to fresher.
-		GoLdflags:              "-s -w",                    //probably unnecessary since the built binary shouldn't be used for production or distribution.
-		GoTrimpath:             true,                       //probably unnecessary since the built binary shouldn't be used for production or distribution.
-		Flags:                  "",                         //
-		Verbose:                false,                      //will be overriden by flag to fresher.
+func newDefaultConfig() (f File) {
+	f = File{
+		WorkingDir:             ".",                                                //local directory fresher is being run from
+		EntryPoint:             ".",                                                //we assume the "package main" is also in the directory fresher is being run from
+		TempDir:                "tmp",                                              //most likely an unused directory
+		ExtensionsToWatch:      []string{".go", ".html"},                           //common files to watch
+		NoRebuildExtensions:    []string{".html"},                                  //don't need to rebuild, unless they are embedded
+		DirectoriesToIgnore:    []string{"tmp", "node_modules", ".git", ".vscode"}, //save to ignore these directories
+		BuildDelayMilliseconds: 100,                                                //100 is "instant" enough but helps catch CTRL+S being hit rapidly.
+		BuildName:              "fresher-build",                                    //could really be anything.
+		BuildLogFilename:       "fresher-build-errors.log",                         //could really be anything.
+		GoTags:                 "",                                                 //will be overridden by flag to fresher.
+		GoLdflags:              "-s -w",                                            //probably unnecessary since the built binary shouldn't be used for production or distribution.
+		GoTrimpath:             true,                                               //probably unnecessary since the built binary shouldn't be used for production or distribution.
+		Flags:                  "",                                                 //
+		Verbose:                false,                                              //will be overridden by flag to fresher.
 
 		usingBuiltInDefaults: true,
 	}
@@ -209,36 +218,41 @@ func CreateDefaultConfig() (err error) {
 // If a config file is not found at the given path, a warning is shown and the
 // built-in default config is used instead. Use -init to create a default config file.
 func Read(path string, print bool) (err error) {
-	// log.Println("Provided config file path:", path, print)
+	//Clean the path to remove anything odd.
+	path = filepath.Clean(path)
 
 	//Handle path to config file.
-	// - If the path is blank, we just use the default config. An empty path
-	//   should not ever happen since the flag that provides the path has a
-	//   default set.
-	// - If a path is provided, check that a file exists at it. If a file does
-	//   not exist, show a warning and use the default build-in config.
-	// - If a file at the path does exist, parse it as a config file.
+	var cfg File
 	if strings.TrimSpace(path) == "" {
-		//Get default config.
-		cfg := newDefaultConfig()
+		//The path provided for the config file flag is blank (-config=""). This
+		//should never really happen since the flag defines a default value (a file
+		//named licensekeys.conf in the working directory where binary is being run from).
+		//This simply catches instances where user provides -config="" for some odd
+		//reason. Since a path was not provided, we cannot save a config file
+		//anywhere. In this case, we just use an "in memory" config that uses default
+		//values.
 
-		//Save the config to this package for use elsewhere in the app.
-		parsedConfig = *cfg
+		//Get default config.
+		cfg = newDefaultConfig()
 
 	} else if _, err = os.Stat(path); os.IsNotExist(err) {
-		// log.Printf("WARNING! (config) Config file not found at %s, use -init flag to create it, using built-in defaults.", path)
+		//A path was provided to the config file flag but a file does not exist at
+		//the given path. A config file will be saved at the provided path with
+		//default values.
+		//
+		//The path provided to the -config flag could be a user provided value or a
+		//default value (i.e.: flag wasn't provided at all).
 
 		//Get default config.
-		cfg := newDefaultConfig()
-
-		//Save the config to this package for use elsewhere in the app.
-		parsedConfig = *cfg
+		cfg = newDefaultConfig()
 
 		//Unset the file not found error.
 		err = nil
 
 	} else {
-		// log.Println("Using config from file:", path)
+		//A path was provided to the config file flag and a file exists at the given
+		//path. Parse the file as a config file. If the file isn't a valid config
+		//file, error out, otherwise continue running the app.
 
 		//Read the file at the path.
 		f, innerErr := os.ReadFile(path)
@@ -247,7 +261,6 @@ func Read(path string, print bool) (err error) {
 		}
 
 		//Parse the file as yaml.
-		var cfg File
 		innerErr = yaml.Unmarshal(f, &cfg)
 		if innerErr != nil {
 			return innerErr
@@ -259,16 +272,16 @@ func Read(path string, print bool) (err error) {
 			log.Println("***PRINTING CONFIG AS PARSED FROM FILE***")
 			cfg.print(path)
 		}
-
-		//Validate & sanitize the data since it could have been edited by a human.
-		innerErr = cfg.validate()
-		if innerErr != nil {
-			return innerErr
-		}
-
-		//Save the config to this package for use elsewhere in the app.
-		parsedConfig = cfg
 	}
+
+	//Validate & sanitize the data since it could have been edited by a human.
+	err = cfg.validate()
+	if err != nil {
+		return err
+	}
+
+	//Save the config to this package for use elsewhere in the app.
+	parsedConfig = cfg
 
 	//Print the config, if needed, as it was sanitized and validated. This logs out
 	//the config as it was understood by the app and some changes may have been made
@@ -310,6 +323,8 @@ func (conf *File) write(path string) (err error) {
 	file.WriteString("\n")
 	file.WriteString("#***Do not delete this file!***\n")
 	file.WriteString("\n")
+	file.WriteString("#***On Windows, when providing a path, use forward slashes in place of a back slashes and surround the path in double quotes!***\n")
+	file.WriteString("\n")
 
 	//Write config to file.
 	_, err = file.Write(y)
@@ -320,6 +335,11 @@ func (conf *File) write(path string) (err error) {
 func (conf *File) validate() (err error) {
 	//Get defaults to use for cases when user provided invalid input.
 	defaults := newDefaultConfig()
+
+	//Clean all paths, regardless of if they are used.
+	conf.WorkingDir = filepath.Clean(filepath.ToSlash(strings.TrimSpace(conf.WorkingDir)))
+	conf.EntryPoint = filepath.Clean(filepath.ToSlash(strings.TrimSpace(conf.EntryPoint)))
+	conf.TempDir = filepath.Clean(filepath.ToSlash(strings.TrimSpace(conf.TempDir)))
 
 	//Make sure working directory is set. This should just be "." in most cases since
 	//the working directory is the directory where "fresher" is being run.
@@ -350,7 +370,7 @@ func (conf *File) validate() (err error) {
 			log.Println("WARNING! (config) ExtensionsToWatch " + extension + " missing leading period, added.")
 		}
 
-		if isStringInSlice(validExtensionsToWatch, extension) {
+		if slices.Contains(validExtensionsToWatch, extension) {
 			log.Println("WARNING! (config) ExtensionsToWatch duplicate " + extension + ", ignored.")
 			continue
 		}
@@ -375,12 +395,12 @@ func (conf *File) validate() (err error) {
 			log.Println("WARNING! (config) NoRebuildExtensions " + extension + " missing leading period, added.")
 		}
 
-		if isStringInSlice(validNoRebuildExtensionss, extension) {
+		if slices.Contains(validNoRebuildExtensionss, extension) {
 			log.Println("WARNING! (config) NoRebuildExtensions duplicate " + extension + ", ignored.")
 			continue
 		}
 
-		if !isStringInSlice(conf.ExtensionsToWatch, extension) {
+		if !slices.Contains(conf.ExtensionsToWatch, extension) {
 			log.Println("WARNING! (config) NoRebuildExtensions extension " + extension + " not included in ExtensionsToWatch, added.")
 			conf.ExtensionsToWatch = append(conf.ExtensionsToWatch, extension)
 		}
@@ -399,7 +419,7 @@ func (conf *File) validate() (err error) {
 		//We don't check if a directory actually exists. Who cares if a directory
 		//listed in the config file doesn't actually exists in the repo.
 
-		if isStringInSlice(validDirectoriesToIgnore, dir) {
+		if slices.Contains(validDirectoriesToIgnore, dir) {
 			log.Println("WARNING! (config) Duplicate directory " + dir + " in DirectoriesToIgnore.")
 			continue
 		}
@@ -482,7 +502,8 @@ func (conf *File) IsTempDir(path string) (yes bool, err error) {
 
 // IsDirectoryToIgnore returns true if the given path is in the DirectoriesToIgnore.
 func (conf *File) IsDirectoryToIgnore(path string) bool {
-	//not using isStringInSlice because of extra HasPrefix.
+	//not using slices.Contains() because of the path may be within a directory to
+	//ignore, and therefore we need to use HasPrefix().
 	for _, d := range conf.DirectoriesToIgnore {
 		if strings.HasPrefix(path, d) {
 			return true
@@ -495,13 +516,13 @@ func (conf *File) IsDirectoryToIgnore(path string) bool {
 // IsRebuildExtension returns true if the given extension is not in the
 // NoRebuildExtensions list.
 func (conf *File) IsRebuildExtension(extension string) bool {
-	return !isStringInSlice(conf.NoRebuildExtensions, extension)
+	return !slices.Contains(conf.NoRebuildExtensions, extension)
 }
 
 // IsExtensionToWatch returns true if the given path contains an extension we should
 // watch for changes.
 func (conf *File) IsExtensionToWatch(extension string) bool {
-	return isStringInSlice(conf.ExtensionsToWatch, extension)
+	return slices.Contains(conf.ExtensionsToWatch, extension)
 }
 
 // UsingDefaults returns true is usingbuildInDefaults is set to true.
@@ -523,19 +544,4 @@ func (conf *File) OverrideTags(t string) {
 // logging on a case-by-case basis.
 func (conf *File) OverrideVerbose(v bool) {
 	conf.Verbose = v
-}
-
-// isStringInSlice checks if needle is in haystack.
-//
-// We could use the experimental generic slices.Contains() function, but since we are
-// only ever comparing strings in this package, using a non-generic func should provide
-// better (if ever so slight) performance. Plus, it removes an import.
-func isStringInSlice(haystack []string, needle string) bool {
-	for _, v := range haystack {
-		if v == needle {
-			return true
-		}
-	}
-
-	return false
 }

@@ -221,19 +221,3 @@ func TestOverrideVerbose(t *testing.T) {
 		return
 	}
 }
-
-func TestIsStringInSlice(t *testing.T) {
-	slice := []string{"a", "s", "d", "f"}
-
-	//Exists
-	if !isStringInSlice(slice, "a") {
-		t.Fatal("String exists, but isStringInSlice return false.")
-		return
-	}
-
-	//Does not exist.
-	if isStringInSlice(slice, "z") {
-		t.Fatal("String does not exist, but isStringInSlice return true.")
-		return
-	}
-}
